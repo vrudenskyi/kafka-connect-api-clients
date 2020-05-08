@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.mckesson.kafka.connect</groupId>
+		<artifactId>kafka-connect-parent</artifactId>
+		<version>1.0.0</version>
+	</parent>
+
+	<artifactId>gcp-api-client</artifactId>
+
+	<dependencies>
+		<!-- parent managed deps -->
+		<dependency>
+			<groupId>com.mckesson.kafka.connect</groupId>
+			<artifactId>kafka-connect-common</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.mckesson.kafka.connect</groupId>
+			<artifactId>pollable-source</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-csv</artifactId>
+		</dependency>
+
+		<!-- project specific deps -->
+		<dependency>
+			<groupId>com.google.auth</groupId>
+			<artifactId>google-auth-library-oauth2-http</artifactId>
+			<version>0.16.2</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.apis</groupId>
+			<artifactId>google-api-services-admin-reports</artifactId>
+			<version>reports_v1-rev83-1.25.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.cloud</groupId>
+			<artifactId>google-cloud-securitycenter</artifactId>
+			<version>0.115.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.cloud</groupId>
+			<artifactId>google-cloud-storage</artifactId>
+			<version>1.102.0</version>
+		</dependency>
+	</dependencies>
+	
+	<distributionManagement>
+		<repository>
+			<id>bintray-vrudenskyi</id>
+			<name>Bintray vrudenskyi kafka-connect</name>
+			<url>https://api.bintray.com/maven/vrudenskyi/kafka-connect/kafka-connect-api-clients/;publish=1</url>
+		</repository>
+	</distributionManagement>
+
+</project>
