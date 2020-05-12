@@ -71,6 +71,7 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
   public static final String TOKEN_ENDPOINT_TEMPLATE = "/ccx/oauth2/{tenantName}/token";
 
   private static final DateTimeFormatter DT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssX").withZone(ZoneOffset.UTC);
+  private static final DateTimeFormatter DT_FORMATTER_REC = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX").withZone(ZoneOffset.UTC);
   private static final String INITIAL_OFFSET_DEFAULT = DateTimeUtils.printDateTime(ZonedDateTime.now().minusDays(1), DT_FORMATTER);
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
@@ -87,6 +88,7 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
 
   protected static final String OFFSET_FROM_KEY = "__from";
   protected static final String OFFSET_TO_KEY = "__to";
+  protected static final String OFFSET_MAX_TIME_KEY = "__maxTime";
   protected static final String OFFSET_OFFSET_KEY = "__offset";
 
   protected String initialOffset;
@@ -138,24 +140,20 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
   @Override
   protected Builder getRequestBuilder(Map<String, Object> partition, Map<String, Object> offset, int itemsToPoll) {
 
-    ZonedDateTime startTime = DateTimeUtils.parseZonedDateTime(offset.get(OFFSET_FROM_KEY).toString(), DT_FORMATTER);
-    ZonedDateTime endTime;
-    if (offset.containsKey(OFFSET_TO_KEY)) {
-      endTime = DateTimeUtils.parseZonedDateTime(offset.get(OFFSET_TO_KEY).toString(), DT_FORMATTER);
-    } else {
+    if (!offset.containsKey(OFFSET_TO_KEY)) {
+      ZonedDateTime startTime = DateTimeUtils.parseZonedDateTime(offset.get(OFFSET_FROM_KEY).toString(), DT_FORMATTER);
       if (startTime.plusMinutes(queryWindow).compareTo(ZonedDateTime.now()) >= 0) {
         log.debug("skip request until: {}", startTime.plusMinutes(queryWindow));
         return null;
       }
-      endTime = ObjectUtils.min(startTime.plusMinutes(queryWindow), ZonedDateTime.now(ZoneOffset.UTC));
+      ZonedDateTime endTime = ObjectUtils.min(startTime.plusMinutes(queryWindow), ZonedDateTime.now(ZoneOffset.UTC));
       offset.put(OFFSET_TO_KEY, DateTimeUtils.printDateTime(endTime, DT_FORMATTER));
-      log.debug("build new request from-to:{} -> {}", offset.get(OFFSET_FROM_KEY), offset.get(OFFSET_TO_KEY));
+      log.debug("New query: {} => {}", offset.get(OFFSET_FROM_KEY), offset.get(OFFSET_TO_KEY));
     }
 
     Map<String, String> queryParams = new HashMap<>();
-
-    queryParams.put("from", DateTimeUtils.printDateTime(startTime, DT_FORMATTER));
-    queryParams.put("to", DateTimeUtils.printDateTime(endTime, DT_FORMATTER));
+    queryParams.put("from", offset.get(OFFSET_FROM_KEY).toString());
+    queryParams.put("to", offset.get(OFFSET_TO_KEY).toString());
     queryParams.put("offset", offset.getOrDefault(OFFSET_OFFSET_KEY, "0").toString());
     queryParams.put("limit", String.valueOf(this.batchSize));
     queryParams.put("type", "userActivity");
@@ -171,10 +169,10 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
   public List<Object> extractData(Map<String, Object> partition, Map<String, Object> offset, Response response) throws APIClientException {
 
     List<Object> data = Collections.emptyList();
+    ZonedDateTime maxTime = DateTimeUtils.parseZonedDateTime(offset.getOrDefault(OFFSET_MAX_TIME_KEY, "1970-01-01T00:00:00Z").toString(), DT_FORMATTER);
 
     JsonNode node;
     try {
-      log.debug("reading data from response...");
       node = mapper.readValue(response.body().byteStream(), JsonNode.class);
     } catch (Exception e1) {
       throw new APIClientException("failed to read response", e1);
@@ -197,6 +195,13 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
       data = new ArrayList<>(dataNode.size());
       for (JsonNode rec : dataNode) {
         try {
+          ZonedDateTime recTime = DateTimeUtils.parseZonedDateTime(rec.at("/requestTime").asText(), DT_FORMATTER_REC);
+          maxTime = ObjectUtils.max(recTime, maxTime);
+        } catch (Exception e1) {
+          //ignore 
+        }
+
+        try {
           data.add(mapper.writeValueAsString(rec));
         } catch (JsonProcessingException e) {
           data.add(rec);
@@ -214,18 +219,24 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
     int total = node.at("/total").asInt();
     long currentOffset = (long) offset.getOrDefault(OFFSET_OFFSET_KEY, 0L);
     if (currentOffset + dataNode.size() >= total) {
-      log.debug("update offset: reset from: {} -> {}", offset.get(OFFSET_FROM_KEY), offset.get(OFFSET_TO_KEY));
-      offset.put(OFFSET_FROM_KEY, offset.get(OFFSET_TO_KEY));
-      offset.remove(OFFSET_TO_KEY);
+      offset.put(OFFSET_FROM_KEY, DateTimeUtils.printDateTime(maxTime, DT_FORMATTER));
       offset.put(OFFSET_OFFSET_KEY, 0L);
+      offset.remove(OFFSET_TO_KEY);
+      offset.remove(OFFSET_MAX_TIME_KEY);
+      log.debug("window finished, updated offset: {}", offset);
 
     } else {
-      log.debug("update offset: offset:{} (total: {})", currentOffset + dataNode.size(), total, offset.get(OFFSET_FROM_KEY), offset.get(OFFSET_TO_KEY));
       offset.put(OFFSET_OFFSET_KEY, currentOffset + dataNode.size());
+      offset.put(OFFSET_MAX_TIME_KEY, DateTimeUtils.printDateTime(maxTime, DT_FORMATTER));
+      log.debug("continue query: {} => {} \n\toffset:{}/{} \n\tmaxTime:{}",
+          offset.get(OFFSET_FROM_KEY),
+          offset.get(OFFSET_TO_KEY),
+          offset.get(OFFSET_OFFSET_KEY),
+          total,
+          offset.get(OFFSET_MAX_TIME_KEY));
+
     }
-
     return data;
-
   }
 
   @Override
