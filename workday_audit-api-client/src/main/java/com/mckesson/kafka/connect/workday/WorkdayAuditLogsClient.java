@@ -169,7 +169,7 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
   public List<Object> extractData(Map<String, Object> partition, Map<String, Object> offset, Response response) throws APIClientException {
 
     List<Object> data = Collections.emptyList();
-    ZonedDateTime maxTime = DateTimeUtils.parseZonedDateTime(offset.getOrDefault(OFFSET_MAX_TIME_KEY, "1970-01-01T00:00:00Z").toString(), DT_FORMATTER);
+    ZonedDateTime maxTime = DateTimeUtils.parseZonedDateTime(offset.getOrDefault(OFFSET_MAX_TIME_KEY, offset.get(OFFSET_FROM_KEY)).toString(), DT_FORMATTER);
 
     JsonNode node;
     try {
@@ -218,8 +218,14 @@ public class WorkdayAuditLogsClient extends HttpAPIClient {
 
     int total = node.at("/total").asInt();
     long currentOffset = (long) offset.getOrDefault(OFFSET_OFFSET_KEY, 0L);
-    if (currentOffset + dataNode.size() >= total) {
-      offset.put(OFFSET_FROM_KEY, DateTimeUtils.printDateTime(maxTime, DT_FORMATTER));
+    if (total == 0) {
+      offset.put(OFFSET_FROM_KEY, offset.get(OFFSET_TO_KEY));
+      offset.put(OFFSET_OFFSET_KEY, 0L);
+      offset.remove(OFFSET_TO_KEY);
+      offset.remove(OFFSET_MAX_TIME_KEY);
+      log.debug("no data for the window, updated offset: {}", offset);
+    } else if (currentOffset + dataNode.size() >= total) {
+      offset.put(OFFSET_FROM_KEY, DateTimeUtils.printDateTime(maxTime.plusSeconds(1), DT_FORMATTER));
       offset.put(OFFSET_OFFSET_KEY, 0L);
       offset.remove(OFFSET_TO_KEY);
       offset.remove(OFFSET_MAX_TIME_KEY);
