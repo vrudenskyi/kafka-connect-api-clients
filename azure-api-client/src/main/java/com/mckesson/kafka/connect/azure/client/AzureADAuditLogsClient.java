@@ -34,6 +34,7 @@ import org.apache.http.HttpStatus;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.util.EntityUtils;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.transforms.util.SimpleConfig;
@@ -233,6 +234,8 @@ public class AzureADAuditLogsClient implements PollableAPIClient {
           log.debug("Failed request, no more retries");
           throw new AzureClientException(e);
         }
+      } finally {
+        EntityUtils.consumeQuietly(resp.getEntity());
       }
 
       JsonNode nlNode = resultNode.findValue("@odata.nextLink");
@@ -296,8 +299,8 @@ public class AzureADAuditLogsClient implements PollableAPIClient {
     // check status
     int httpStatus = resp.getStatusLine().getStatusCode();
     log.debug("http response status: {}", httpStatus);
-    if (HttpStatus.SC_OK == httpStatus) {
 
+    if (HttpStatus.SC_OK == httpStatus) {
       try (InputStream respIS = resp.getEntity().getContent();) {
         T value = jacksonObjectMapper.readValue(respIS, valueType);
         return value;
@@ -315,7 +318,6 @@ public class AzureADAuditLogsClient implements PollableAPIClient {
       } catch (Exception e) {
         throw new APIClientException("Failed to read content from a success response", e);
       }
-
       log.error("API throttling error(429). Retry-After={},  Rate-Limit-Reason={} Message={}", retryAfter, rateLimitReason, message);
       GraphErrorMessage graphError = jacksonObjectMapper.readValue(message, GraphErrorMessage.class);
       log.debug("Sleep {} seconds before retry", retryAfter);
@@ -327,6 +329,7 @@ public class AzureADAuditLogsClient implements PollableAPIClient {
       GraphErrorMessage graphError = jacksonObjectMapper.readValue(message, GraphErrorMessage.class);
       throw new Exception(graphError.getError().getMessage());
     }
+
   }
 
   public List<Map<String, Object>> partitions() {
