@@ -41,9 +41,12 @@ import com.mckesson.kafka.connect.utils.OkHttpClientConfig;
 import com.mckesson.kafka.connect.utils.UrlBuilder;
 
 import okhttp3.Authenticator;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.internal.http.HttpMethod;
 
 /**
  * Generic implementation for simple http client based pollers. 
@@ -57,10 +60,18 @@ public abstract class HttpAPIClient implements PollableAPIClient {
 
   public static final String SERVER_URI_CONFIG = "http.serverUri";
   public static final String ENDPPOINT_CONFIG = "http.endpoint";
+  public static final String METHOD_CONFIG = "http.method";
+  public static final String METHOD_DEFAULT = "GET";
 
   public static final String AUTH_TYPE_CONFIG = "http.auth.type";
   public static final String AUTH_TYPE_DEFAULT = "none";
   public static final String AUTH_CLASS_CONFIG = "http.auth.class";
+
+  public static final String REQUEST_PAYLOAD_CONFIG = "http.request.payload";
+  public static final String REQUEST_PAYLOAD_DEFAULT = "";
+
+  public static final String REQUEST_CONTENT_TYPE_CONFIG = "http.request.contentType";
+  public static final String REQUEST_CONTENT_TYPE_DEFAULT = "text/plain";
 
   public static final String REQUEST_HEADERS_CONFIG = "http.request.headers";
   public static final String HEADER_NAME_CONFIG = "name";
@@ -99,7 +110,10 @@ public abstract class HttpAPIClient implements PollableAPIClient {
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
       .define(SERVER_URI_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Server URI. Required.")
       .define(ENDPPOINT_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Endpoint. Required")
+      .define(METHOD_CONFIG, ConfigDef.Type.STRING, METHOD_DEFAULT, ConfigDef.Importance.MEDIUM, "Http method. default: GET")
       .define(AUTH_TYPE_CONFIG, ConfigDef.Type.STRING, AUTH_TYPE_DEFAULT, ConfigDef.Importance.MEDIUM, "Authtype. Default: none")
+      .define(REQUEST_PAYLOAD_CONFIG, ConfigDef.Type.STRING, REQUEST_PAYLOAD_DEFAULT, ConfigDef.Importance.MEDIUM, "Http request payload. Default: <empty-string>")
+      .define(REQUEST_CONTENT_TYPE_CONFIG, ConfigDef.Type.STRING, REQUEST_CONTENT_TYPE_DEFAULT, ConfigDef.Importance.MEDIUM, "Request content type. default: " + REQUEST_CONTENT_TYPE_DEFAULT)
       .define(REQUEST_HEADERS_CONFIG, ConfigDef.Type.LIST, Collections.emptyList(), ConfigDef.Importance.MEDIUM, "Http request headers")
       .define(AUTH_CLASS_CONFIG, ConfigDef.Type.CLASS, null, ConfigDef.Importance.LOW, "Custom auth class");
 
@@ -116,7 +130,9 @@ public abstract class HttpAPIClient implements PollableAPIClient {
 
   protected String serverUri;
   protected String endpoint;
-  protected String httpMethod = "GET";
+  protected String httpMethod;
+  protected String requestPayload;
+  protected String requestContentType;
 
   @Override
   public void configure(Map<String, ?> configs) {
@@ -125,6 +141,9 @@ public abstract class HttpAPIClient implements PollableAPIClient {
     SimpleConfig conf = new SimpleConfig(CONFIG_DEF, configs);
     this.serverUri = conf.getString(SERVER_URI_CONFIG);
     this.endpoint = conf.getString(ENDPPOINT_CONFIG);
+    this.httpMethod = conf.getString(METHOD_CONFIG);
+    this.requestPayload = conf.getString(REQUEST_PAYLOAD_CONFIG);
+    this.requestContentType = conf.getString(REQUEST_CONTENT_TYPE_CONFIG);
 
     try {
       this.httpClient = httpClientBuilder(configs).build();
@@ -256,9 +275,15 @@ public abstract class HttpAPIClient implements PollableAPIClient {
       });
     }
 
+    String method = partition.get(PARTITION_METHOD_KEY).toString();
+    RequestBody body = null;
+    if (HttpMethod.requiresRequestBody(method)) {
+      body = RequestBody.create(MediaType.parse(this.requestContentType), this.requestPayload);
+    }
+
     Request.Builder requestBuilder = new Request.Builder()
         .url(ub.getUrl())
-        .method(partition.get(PARTITION_METHOD_KEY).toString(), null);
+        .method(method, body);
 
     if (httpHeaders != null && httpHeaders.size() > 0) {
       for (Map.Entry<String, List<String>> e : httpHeaders.entrySet()) {
