@@ -317,6 +317,8 @@ public class AzureADAuditLogsClient implements PollableAPIClient {
         message = CharStreams.toString(new InputStreamReader(respIS, Charsets.UTF_8));
       } catch (Exception e) {
         throw new APIClientException("Failed to read content from a success response", e);
+      } finally {
+        EntityUtils.consumeQuietly(resp.getEntity());
       }
       log.error("API throttling error(429). Retry-After={},  Rate-Limit-Reason={} Message={}", retryAfter, rateLimitReason, message);
       GraphErrorMessage graphError = jacksonObjectMapper.readValue(message, GraphErrorMessage.class);
