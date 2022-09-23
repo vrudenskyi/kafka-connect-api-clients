@@ -1,4 +1,4 @@
-package com.mckesson.kafka.connect.http;
+package com.vrudenskyi.kafka.connect.http;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -6,6 +6,9 @@ import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.junit.Assert;
 import org.junit.Test;
+
+import com.vrudenskyi.kafka.connect.http.HttpAPIClient;
+import com.vrudenskyi.kafka.connect.http.JsonGetAPIClient;
 
 import okhttp3.MediaType;
 import okhttp3.Request;
